@@ -164,6 +164,9 @@ runSyncToArchive opts = do
           unless archiveFileExists do
             packageStorePathExists <- liftIO $ doesDirectoryExist packageStorePath
 
+            unless packageStorePathExists do
+                CIO.putStrLn $ packageName <> ": store path missing: " <> tshow packageStorePath
+
             when packageStorePathExists do
               let workingStorePackagePath = tempPath </> Z.packageDir pInfo
               liftIO $ IO.createDirectoryIfMissing True workingStorePackagePath
@@ -206,7 +209,7 @@ runSyncToArchive opts = do
                         <> tshow (fmap AWS.toText [scopedArchiveFile, archiveFile])
                         <> ": " <> tshow e
                       OO.throw WorkFatal
-              
+
     return ()
 
   earlyExit <- STM.readTVarIO tEarlyExit
