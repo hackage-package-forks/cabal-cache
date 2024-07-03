@@ -17,8 +17,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["9.6.6"]
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        ghc:
+        - 9.6.6
+        os:
+        - ubuntu-22.04
+        - ubuntu-20.04
+        - macOS-14
+        - windows-2022
 
     steps:
       - uses: actions/checkout@v4
@@ -47,28 +52,16 @@ jobs:
         env:
           GHC_VER: ${{ matrix.ghc }}
         run: |
-          HS_BIN=$(find dist-newstyle \( -name 'cabal-cache' -o -name 'cabal-cache.exe' \) -type f | head -n 1)
+          HS_BIN=$(cabal list-bin cabal-cache)
           test -f "$HS_BIN"
           NAME="cabal-cache"
 
-          case ${{ matrix.os }} in
-            ubuntu-*)   os="linux"    ;;
-            macOS-*)    os="darwin"   ;;
-            windows-*)  os="windows"  ;;
-            *)          exit 1        ;; # error
-          esac
-          arch_os="$(uname -m)-$os"
+          arch_os="$(uname -m)-${{ matrix.os }}"
 
           cp "$HS_BIN" "$NAME${{env.EXE_EXT}}"
           [ "$OS" != Windows_NT ] && strip "$NAME${{env.EXE_EXT}}"
 
           mkdir -p artifacts
-
-          7z a "artifacts/$NAME-$arch_os.zip" "$NAME${{env.EXE_EXT}}"
-          echo "path_zip=$NAME.zip" >> $GITHUB_OUTPUT
-
-          gzip -c --best "$NAME${{env.EXE_EXT}}" > artifacts/$NAME-$arch_os${{env.EXE_EXT}}.gz
-          echo "path_gzip=$NAME.gz" >> $GITHUB_OUTPUT
 
           tar zcvf "artifacts/$NAME-$arch_os.tar.gz" "$NAME${{env.EXE_EXT}}"
           echo "path_targz=$NAME.targz" >> $GITHUB_OUTPUT
@@ -99,10 +92,6 @@ jobs:
       - name: Tag new version
         id: tag
         if: ${{ github.ref == 'refs/heads/main' }}
-        env:
-          server: http://hackage.haskell.org
-          username: ${{ secrets.HACKAGE_USER }}
-          password: ${{ secrets.HACKAGE_PASS }}
         run: |
           package_version="$(cat *.cabal | grep '^version:' | cut -d : -f 2 | xargs)"
 
@@ -163,8 +152,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["9.6.6"]
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        ghc:
+        - 9.6.6
+        os:
+        - ubuntu-22.04
+        - ubuntu-20.04
+        - macOS-14
+        - windows-2022
 
     steps:
       - uses: actions/download-artifact@v2
@@ -179,13 +173,7 @@ jobs:
       - name: Compute axes
         id: axes
         run: |
-          case ${{ matrix.os }} in
-            ubuntu-*)   os="linux"    ;;
-            macOS-*)    os="darwin"   ;;
-            windows-*)  os="windows"  ;;
-            *)          exit 1        ;; # error
-          esac
-          arch_os="$(uname -m)-$os"
+          arch_os="$(uname -m)-${{ matrix.os }}"
           echo "arch_os=$arch_os" >> $GITHUB_OUTPUT
 
       - name: Set some window specific things
@@ -198,26 +186,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: artifacts/cabal-cache-${{ steps.axes.outputs.arch_os }}${{env.EXE_EXT}}.gz
-          asset_name: cabal-cache-${{ steps.axes.outputs.arch_os }}.gz
-          asset_content_type: application/gzip
-
-      - name: Upload Release Binary
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
           asset_path: artifacts/cabal-cache-${{ steps.axes.outputs.arch_os }}.tar.gz
           asset_name: cabal-cache-${{ steps.axes.outputs.arch_os }}.tar.gz
           asset_content_type: application/gzip
 
-      - name: Upload Release Binary
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: artifacts/cabal-cache-${{ steps.axes.outputs.arch_os }}.zip
-          asset_name: cabal-cache-${{ steps.axes.outputs.arch_os }}.zip
-          asset_content_type: application/zip
