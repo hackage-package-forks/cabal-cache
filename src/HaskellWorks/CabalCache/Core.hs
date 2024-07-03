@@ -141,11 +141,30 @@ relativePaths basePath pInfo =
   ]
 
 getPackages :: FilePath -> Z.PlanJson -> IO [PackageInfo]
-getPackages basePath planJson = forM packages (mkPackageInfo basePath compilerId')
+getPackages basePath planJson = do
+  -- the "Project Unit Id" is currently not included in the plan.json but
+  -- required to discover the location of a package in the store.
+  cid <- getGhcProjectUnitId (T.unpack compilerId') >>= \case
+    Nothing -> return compilerId'
+    Just x -> do
+        return x
+  putStrLn $ "compiler-id: " <> show cid
+  forM packages (mkPackageInfo basePath cid)
   where compilerId' :: Text
         compilerId' = planJson ^. the @"compilerId"
         packages :: [Z.Package]
         packages = planJson ^. the @"installPlan"
+
+-- This is a hack until https://github.com/haskell/cabal/issues/10165 got
+-- resolved
+getGhcProjectUnitId :: FilePath -> IO (Maybe Text)
+getGhcProjectUnitId ghcId = do
+    exe <- IO.findExecutable ghcId >>= \case
+        Nothing -> error $ "executable not found for " <> ghcId
+        Just x -> return x
+    info :: [(Text, Text)] <- read <$> IO.readProcess exe ["--info"] ""
+    -- look for something like this: ("Project Unit Id","ghc-9.10.1-64dd")
+    return $ lookup "Project Unit Id" info
 
 loadPlan :: ()
   => MonadIO m
