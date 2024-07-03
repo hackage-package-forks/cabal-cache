@@ -6,6 +6,7 @@
 
 module HaskellWorks.CabalCache.Types
   ( CompilerId,
+    CompilerAbiId,
     PackageId,
     PackageName,
     CompilerContext(..),
@@ -22,6 +23,7 @@ import Prelude      hiding (id)
 
 import qualified Data.Aeson as J
 
+type CompilerAbiId = Text
 type CompilerId   = Text
 type PackageId    = Text
 type PackageName  = Text

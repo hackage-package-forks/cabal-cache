@@ -11,6 +11,7 @@ module HaskellWorks.CabalCache.Core
     Tagged(..),
     Presence(..),
     getPackages,
+    getCompilerAbiId,
     relativePaths,
     loadPlan,
     mkCompilerContext,
@@ -57,6 +58,7 @@ data Tagged a t = Tagged
 
 data PackageInfo = PackageInfo
   { compilerId  :: Z.CompilerId
+  , compilerAbiId  :: Z.CompilerAbiId
   , packageId   :: Z.PackageId
   , packageName :: Z.PackageName
   , packageDir  :: PackageDir
@@ -142,29 +144,35 @@ relativePaths basePath pInfo =
 
 getPackages :: FilePath -> Z.PlanJson -> IO [PackageInfo]
 getPackages basePath planJson = do
-  -- the "Project Unit Id" is currently not included in the plan.json but
-  -- required to discover the location of a package in the store.
-  cid <- getGhcProjectUnitId (T.unpack compilerId') >>= \case
+  compilerAbiId' <- getCompilerAbiId planJson
+  putStrLn $ "compiler-abi-id: " <> show compilerAbiId'
+  forM packages (mkPackageInfo basePath compilerId' compilerAbiId')
+ where
+  packages :: [Z.Package]
+  packages = planJson ^. the @"installPlan"
+  compilerId' = planJson ^. the @"compilerId"
+
+-- | the "Project Unit Id" is currently not included in the plan.json but
+-- required to discover the location of a package in the store.
+--
+getCompilerAbiId :: Z.PlanJson -> IO Z.CompilerId
+getCompilerAbiId planJson = do
+  getGhcProjectUnitId (T.unpack compilerId') >>= \case
     Nothing -> return compilerId'
-    Just x -> do
-        return x
-  putStrLn $ "compiler-id: " <> show cid
-  forM packages (mkPackageInfo basePath cid)
-  where compilerId' :: Text
-        compilerId' = planJson ^. the @"compilerId"
-        packages :: [Z.Package]
-        packages = planJson ^. the @"installPlan"
+    Just x -> return x
+ where
+  compilerId' = planJson ^. the @"compilerId"
 
 -- This is a hack until https://github.com/haskell/cabal/issues/10165 got
 -- resolved
 getGhcProjectUnitId :: FilePath -> IO (Maybe Text)
 getGhcProjectUnitId ghcId = do
-    exe <- IO.findExecutable ghcId >>= \case
-        Nothing -> error $ "executable not found for " <> ghcId
-        Just x -> return x
-    info :: [(Text, Text)] <- read <$> IO.readProcess exe ["--info"] ""
-    -- look for something like this: ("Project Unit Id","ghc-9.10.1-64dd")
-    return $ lookup "Project Unit Id" info
+  exe <- IO.findExecutable ghcId >>= \case
+    Nothing -> error $ "executable not found for " <> ghcId
+    Just x -> return x
+  info :: [(Text, Text)] <- read <$> IO.readProcess exe ["--info"] ""
+  -- look for something like this: ("Project Unit Id","ghc-9.10.1-64dd")
+  return $ lookup "Project Unit Id" info
 
 loadPlan :: ()
   => MonadIO m
@@ -178,22 +186,23 @@ loadPlan resolvedBuildPath = do
   pure do a :: Z.PlanJson
 
 -------------------------------------------------------------------------------
-mkPackageInfo :: FilePath -> Z.CompilerId -> Z.Package -> IO PackageInfo
-mkPackageInfo basePath cid pkg = do
+mkPackageInfo :: FilePath -> Z.CompilerId -> Z.CompilerAbiId -> Z.Package -> IO PackageInfo
+mkPackageInfo basePath cid caid pkg = do
   let pid               = pkg ^. the @"id"
-  let compilerPath      = basePath </> T.unpack cid
-  let relativeConfPath  = T.unpack cid </> "package.db" </> T.unpack pid <.> ".conf"
+  let compilerPath      = basePath </> T.unpack caid
+  let relativeConfPath  = T.unpack caid </> "package.db" </> T.unpack pid <.> ".conf"
   let absoluteConfPath  = basePath </> relativeConfPath
   let libPath           = compilerPath </> "lib"
-  let relativeLibPath   = T.unpack cid </> "lib"
+  let relativeLibPath   = T.unpack caid </> "lib"
   let libPrefix         = "libHS" <> pid
   absoluteConfPathExists <- IO.doesFileExist absoluteConfPath
   libFiles <- getLibFiles relativeLibPath libPath libPrefix
   return PackageInfo
     { compilerId  = cid
+    , compilerAbiId = caid
     , packageId   = pid
     , packageName = pkg ^. the @"name"
-    , packageDir  = T.unpack cid </> T.unpack pid
+    , packageDir  = T.unpack caid </> T.unpack pid
     , confPath    = Tagged relativeConfPath (bool Absent Present absoluteConfPathExists)
     , libs        = libFiles
     }

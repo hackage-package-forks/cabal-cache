@@ -97,7 +97,7 @@ runSyncToArchive opts = do
             CIO.hPutStrLn IO.stderr e
             OO.throw ExitFailure
 
-    let compilerId = planJson ^. the @"compilerId"
+    compilerAbiId <- liftIO $ Z.getCompilerAbiId planJson
 
     envAws <-
       liftIO (IO.unsafeInterleaveIO (AWS.mkEnv (opts ^. the @"region") (AWS.awsLogger awsLogLevel)))
@@ -113,8 +113,8 @@ runSyncToArchive opts = do
                             & the @"secure" .~ ssl
               Nothing -> id
 
-    let archivePath       = versionedArchiveUri </> compilerId
-    let scopedArchivePath = scopedArchiveUri </> compilerId
+    let archivePath       = versionedArchiveUri </> compilerAbiId
+    let scopedArchivePath = scopedArchiveUri </> compilerAbiId
 
     liftIO $ IO.createLocalDirectoryIfMissing archivePath
     liftIO $ IO.createLocalDirectoryIfMissing scopedArchivePath
@@ -125,7 +125,7 @@ runSyncToArchive opts = do
 
     let planData = buildPlanData planJson (nonShareable ^.. each . the @"packageId")
 
-    let storeCompilerPath           = storePath </> T.unpack compilerId
+    let storeCompilerPath           = storePath </> T.unpack compilerAbiId
     let storeCompilerPackageDbPath  = storeCompilerPath </> "package.db"
 
     storeCompilerPackageDbPathExists <- liftIO $ doesDirectoryExist storeCompilerPackageDbPath

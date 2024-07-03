@@ -121,8 +121,8 @@ runSyncFromArchive opts = OO.runOops $ OO.catchAndExitFailure @ExitFailure do
                             & the @"port"   .~ port
                             & the @"secure" .~ ssl
               Nothing -> id
-    let compilerId                  = planJson ^. the @"compilerId"
-    let storeCompilerPath           = storePath </> T.unpack compilerId
+    compilerAbiId <- liftIO $ Z.getCompilerAbiId planJson
+    let storeCompilerPath           = storePath </> T.unpack compilerAbiId
     let storeCompilerPackageDbPath  = storeCompilerPath </> "package.db"
     let storeCompilerLibPath        = storeCompilerPath </> "lib"
 
@@ -154,7 +154,7 @@ runSyncFromArchive opts = OO.runOops $ OO.catchAndExitFailure @ExitFailure do
     let pInfos = M.fromList $ fmap (\p -> (p ^. the @"packageId", p)) packages
 
     IO.withSystemTempDirectory "cabal-cache" $ \tempPath -> do
-      liftIO $ IO.createDirectoryIfMissing True (tempPath </> T.unpack compilerId </> "package.db")
+      liftIO $ IO.createDirectoryIfMissing True (tempPath </> T.unpack compilerAbiId </> "package.db")
 
       liftIO $ IO.forkThreadsWait threads $ OO.runOops $ DQ.runQueue downloadQueue $ \packageId -> do
         OO.recoverOrVoid @DQ.DownloadStatus do
@@ -223,7 +223,7 @@ runSyncFromArchive opts = OO.runOops $ OO.catchAndExitFailure @ExitFailure do
                     DQ.fail
 
             let Z.Tagged conf _ = Z.confPath pInfo
-            
+
             let theConfPath = storePath </> conf
             let tempConfPath = tempPath </> conf
             confPathExists <- liftIO $ IO.doesFileExist theConfPath
@@ -249,7 +249,7 @@ ensureStorePathCleanup :: ()
   => FilePath
   -> ExceptT (OO.Variant e) m a
   -> ExceptT (OO.Variant e) m a
-ensureStorePathCleanup packageStorePath = 
+ensureStorePathCleanup packageStorePath =
   OO.snatch @DQ.DownloadStatus \downloadStatus -> do
     case downloadStatus of
       DQ.DownloadFailure -> M.cleanupStorePath packageStorePath
