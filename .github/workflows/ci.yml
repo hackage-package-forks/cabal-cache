@@ -64,12 +64,13 @@ jobs:
 
           mkdir -p artifacts
 
+          
           tar zcvf "artifacts/$NAME-$arch_os.tar.gz" "$NAME${{env.EXE_EXT}}"
           echo "path_targz=$NAME.targz" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cabal-cache-${{ runner.OS }}-${{ matrix.ghc }}
+          name: cabal-cache-${{ matrix.OS }}-${{ matrix.ghc }}
           path: artifacts
 
   check:
@@ -160,12 +161,13 @@ jobs:
         - ubuntu-20.04
         - macOS-14
         - windows-2022
+        - macos-13
 
     steps:
       - uses: actions/download-artifact@v4
         id: download_artifact
         with:
-          name: cabal-cache-${{ runner.OS }}-${{ matrix.ghc }}
+          name: cabal-cache-${{ matrix.OS }}-${{ matrix.ghc }}
           path: artifacts
 
       - name: URL
